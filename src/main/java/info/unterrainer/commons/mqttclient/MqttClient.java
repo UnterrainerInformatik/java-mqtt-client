@@ -151,7 +151,12 @@ public class MqttClient {
 					if (type == Double.class)
 						v = Double.parseDouble(stringValue);
 					if (type == Boolean.class)
-						v = Boolean.parseBoolean(stringValue);
+						if (stringValue.trim() == "0")
+							v = false;
+						else if (stringValue.trim() == "1")
+							v = true;
+						else
+							v = Boolean.parseBoolean(stringValue);
 				} catch (NumberFormatException e1) {
 					log.warn("Error parsing to type [{}]. Falling back to string.", type.getSimpleName());
 				}
