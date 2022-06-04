@@ -17,7 +17,7 @@
 
 	<modelVersion>4.0.0</modelVersion>
 	<artifactId>mqtt-client</artifactId>
-	<version>0.0.10</version>
+	<version>0.0.11</version>
 	<name>MqttClient</name>
 	<packaging>jar</packaging>
 
@@ -25,12 +25,12 @@
 		<dependency>
 			<groupId>info.unterrainer.commons</groupId>
 			<artifactId>jre-utils</artifactId>
-			<version>0.2.11</version>
+			<version>0.2.13</version>
 		</dependency>
 		<dependency>
 			<groupId>info.unterrainer.commons</groupId>
 			<artifactId>serialization</artifactId>
-			<version>0.1.6</version>
+			<version>0.1.9</version>
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.paho</groupId>
