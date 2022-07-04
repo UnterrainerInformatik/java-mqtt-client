@@ -28,3 +28,5 @@ hs_err_pid*
 .project
 
 .settings/
+
+src/main/java/info/unterrainer/server/mqttclient/Information.java
