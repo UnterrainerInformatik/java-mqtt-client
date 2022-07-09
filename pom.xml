@@ -9,15 +9,15 @@
 	</parent>
 
 	<properties>
-		<mainclass>info.unterrainer.server.mqttclient.MqttClient</mainclass>
-		<name>Elite-Server-DTOs</name>
-		<package-path>info/unterrainer/server/mqttclient</package-path>
-		<packg-string>info.unterrainer.server.mqttclient</packg-string>
+		<mainclass>info.unterrainer.commons.mqttclient.MqttClient</mainclass>
+		<name>MQTT-Client</name>
+		<package-path>info/unterrainer/commons/mqttclient</package-path>
+		<packg-string>info.unterrainer.commons.mqttclient</packg-string>
 	</properties>
 
 	<modelVersion>4.0.0</modelVersion>
 	<artifactId>mqtt-client</artifactId>
-	<version>0.1.0</version>
+	<version>0.1.1</version>
 	<name>MqttClient</name>
 	<packaging>jar</packaging>
 
@@ -25,7 +25,7 @@
 		<dependency>
 			<groupId>info.unterrainer.commons</groupId>
 			<artifactId>jre-utils</artifactId>
-			<version>0.3.0</version>
+			<version>0.3.1</version>
 		</dependency>
 		<dependency>
 			<groupId>info.unterrainer.commons</groupId>

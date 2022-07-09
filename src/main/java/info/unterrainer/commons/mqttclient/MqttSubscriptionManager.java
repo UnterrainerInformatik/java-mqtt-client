@@ -16,7 +16,7 @@ public class MqttSubscriptionManager<T extends MqttSubscription> {
 
 	public void updateDifferentialSubscriptionsOnClient() {
 		client.connect();
-		SetIntersection intersection = SetIntersection.of(getCurrentMap().keySet(), getOldMap().keySet());
+		SetIntersection intersection = SetIntersection.of(getOldMap().keySet(), getCurrentMap().keySet());
 		for (String topic : intersection.getDelete())
 			client.unsubscribe(topic);
 		Map<String, T> map = getCurrentMap();
