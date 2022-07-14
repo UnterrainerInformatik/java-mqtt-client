@@ -60,7 +60,7 @@ public class MqttClient {
 	 * Connects to the given server if it's disconnected. Immediately returns
 	 * otherwise.
 	 */
-	public void connect() {
+	public synchronized void connect() {
 		if (client.isConnected())
 			return;
 		try {
