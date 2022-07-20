@@ -159,10 +159,11 @@ public class MqttClient {
 							v = Boolean.parseBoolean(stringValue);
 				} catch (NumberFormatException e1) {
 					log.warn("Error parsing to type [{}]. Falling back to string.", type.getSimpleName());
+					// Fallback is String.
+					setter.accept(actualTopic, (T) String.class.cast(v));
+					return;
 				}
 			}
-
-			// Fallback is String.
 			setter.accept(actualTopic, (T) type.cast(v));
 		});
 	}
