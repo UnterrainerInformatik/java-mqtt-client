@@ -17,7 +17,7 @@
 
 	<modelVersion>4.0.0</modelVersion>
 	<artifactId>mqtt-client</artifactId>
-	<version>0.1.4</version>
+	<version>0.1.5</version>
 	<name>MqttClient</name>
 	<packaging>jar</packaging>
 
