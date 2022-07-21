@@ -151,10 +151,15 @@ public class MqttClient {
 					if (type == Double.class)
 						v = Double.parseDouble(stringValue);
 					if (type == Boolean.class)
-						if (stringValue.trim() == "0")
-							v = false;
-						else if (stringValue.trim() == "1")
+						if ("1".equals(stringValue.trim()) || "on".equalsIgnoreCase(stringValue.trim())
+								|| "true".equalsIgnoreCase(stringValue.trim())
+								|| "open".equalsIgnoreCase(stringValue.trim()))
 							v = true;
+						else if ("0".equals(stringValue.trim()) || "off".equalsIgnoreCase(stringValue.trim())
+								|| "false".equalsIgnoreCase(stringValue.trim())
+								|| "close".equalsIgnoreCase(stringValue.trim())
+								|| "overpower".equalsIgnoreCase(stringValue.trim()))
+							v = false;
 						else
 							v = Boolean.parseBoolean(stringValue);
 				} catch (NumberFormatException e1) {
