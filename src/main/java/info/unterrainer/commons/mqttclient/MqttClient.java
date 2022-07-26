@@ -8,7 +8,7 @@ import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
 
-import info.unterrainer.commons.serialization.JsonMapper;
+import info.unterrainer.commons.serialization.jsonmapper.JsonMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
