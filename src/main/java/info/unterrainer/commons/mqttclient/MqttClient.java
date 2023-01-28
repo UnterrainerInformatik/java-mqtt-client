@@ -134,42 +134,46 @@ public class MqttClient {
 	public <T> void subscribe(final String topic, final Class<?> type, final BiConsumer<String, T> setter) {
 
 		subscribe(topic, (actualTopic, actualMessage) -> {
-			String stringValue = new String(actualMessage.getPayload());
-			Object v = stringValue;
-			log.info("subscription fired for topic [{}] with value [{}]", actualTopic, stringValue);
-
 			try {
-				v = jsonMapper.fromStringTo(type, stringValue);
-			} catch (Exception e) {
+				String stringValue = new String(actualMessage.getPayload());
+				Object v = stringValue;
+				log.info("subscription fired for topic [{}] with value [{}]", actualTopic, stringValue);
+
 				try {
-					if (type == Integer.class)
-						v = Integer.parseInt(stringValue);
-					if (type == Long.class)
-						v = Long.parseLong(stringValue);
-					if (type == Float.class)
-						v = Float.parseFloat(stringValue);
-					if (type == Double.class)
-						v = Double.parseDouble(stringValue);
-					if (type == Boolean.class)
-						if ("1".equals(stringValue.trim()) || "on".equalsIgnoreCase(stringValue.trim())
-								|| "true".equalsIgnoreCase(stringValue.trim())
-								|| "open".equalsIgnoreCase(stringValue.trim()))
-							v = true;
-						else if ("0".equals(stringValue.trim()) || "off".equalsIgnoreCase(stringValue.trim())
-								|| "false".equalsIgnoreCase(stringValue.trim())
-								|| "close".equalsIgnoreCase(stringValue.trim())
-								|| "overpower".equalsIgnoreCase(stringValue.trim()))
-							v = false;
-						else
-							v = Boolean.parseBoolean(stringValue);
-				} catch (NumberFormatException e1) {
-					log.warn("Error parsing to type [{}]. Falling back to string.", type.getSimpleName());
-					// Fallback is String.
-					setter.accept(actualTopic, (T) String.class.cast(v));
-					return;
+					v = jsonMapper.fromStringTo(type, stringValue);
+				} catch (Exception e) {
+					try {
+						if (type == Integer.class)
+							v = Integer.parseInt(stringValue);
+						if (type == Long.class)
+							v = Long.parseLong(stringValue);
+						if (type == Float.class)
+							v = Float.parseFloat(stringValue);
+						if (type == Double.class)
+							v = Double.parseDouble(stringValue);
+						if (type == Boolean.class)
+							if ("1".equals(stringValue.trim()) || "on".equalsIgnoreCase(stringValue.trim())
+									|| "true".equalsIgnoreCase(stringValue.trim())
+									|| "open".equalsIgnoreCase(stringValue.trim()))
+								v = true;
+							else if ("0".equals(stringValue.trim()) || "off".equalsIgnoreCase(stringValue.trim())
+									|| "false".equalsIgnoreCase(stringValue.trim())
+									|| "close".equalsIgnoreCase(stringValue.trim())
+									|| "overpower".equalsIgnoreCase(stringValue.trim()))
+								v = false;
+							else
+								v = Boolean.parseBoolean(stringValue);
+					} catch (NumberFormatException e1) {
+						log.warn("Error parsing to type [{}]. Falling back to string.", type.getSimpleName());
+						// Fallback is String.
+						setter.accept(actualTopic, (T) String.class.cast(v));
+						return;
+					}
 				}
+				setter.accept(actualTopic, (T) type.cast(v));
+			} catch (Throwable e) {
+				log.error("Exception in MQTT subscription.", e);
 			}
-			setter.accept(actualTopic, (T) type.cast(v));
 		});
 	}
 
