@@ -7,28 +7,29 @@ import info.unterrainer.commons.jreutils.SetIntersection;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-public class MqttSubscriptionManager<T extends MqttSubscription> {
+public class MqttSubscriptionManager<U, T extends MqttSubscription> {
 
 	private final MqttClient client;
 	private boolean takeSecondMap;
-	private Map<String, T> map1 = new HashMap<>();
-	private Map<String, T> map2 = new HashMap<>();
+	private Map<U, T> map1 = new HashMap<>();
+	private Map<U, T> map2 = new HashMap<>();
 
 	public void updateDifferentialSubscriptionsOnClient() {
 		client.connect();
-		SetIntersection intersection = SetIntersection.of(getOldMap().keySet(), getCurrentMap().keySet());
-		for (String topic : intersection.getDelete())
-			client.unsubscribe(topic);
-		Map<String, T> map = getCurrentMap();
-		for (String topic : intersection.getCreate()) {
-			T subscription = map.get(topic);
+		Map<U, T> oldMap = getOldMap();
+		Map<U, T> newMap = getCurrentMap();
+		SetIntersection<U> intersection = SetIntersection.of(oldMap.keySet(), newMap.keySet());
+		for (U id : intersection.getDelete())
+			client.unsubscribe(oldMap.get(id).getTopic());
+		for (U id : intersection.getCreate()) {
+			T subscription = newMap.get(id);
 			client.subscribe(subscription.getTopic(), subscription.getType(), subscription.getSetter());
 		}
 	}
 
 	public void unsubscribeAllSubscriptionsOnClient() {
 		client.connect();
-		Map<String, T> map = getCurrentMap();
+		Map<U, T> map = getCurrentMap();
 		for (T subscription : map.values())
 			client.unsubscribe(subscription.getTopic());
 	}
@@ -38,15 +39,15 @@ public class MqttSubscriptionManager<T extends MqttSubscription> {
 		getCurrentMap().clear();
 	}
 
-	public Map<String, T> getCurrentMap() {
-		Map<String, T> map = map1;
+	public Map<U, T> getCurrentMap() {
+		Map<U, T> map = map1;
 		if (takeSecondMap)
 			map = map2;
 		return map;
 	}
 
-	public Map<String, T> getOldMap() {
-		Map<String, T> map = map1;
+	public Map<U, T> getOldMap() {
+		Map<U, T> map = map1;
 		if (!takeSecondMap)
 			map = map2;
 		return map;
