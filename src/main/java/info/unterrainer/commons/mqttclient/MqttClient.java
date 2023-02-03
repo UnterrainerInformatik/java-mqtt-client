@@ -112,6 +112,10 @@ public class MqttClient {
 		}
 	}
 
+	public static boolean topicsMatch(String receivedTopic, String wildCardTopic) {
+		return receivedTopic.matches(wildCardTopic.replaceAll("\\+", "[^/]+").replaceAll("#", ".+"));
+	}
+
 	public void subscribe(final String topicFilter, final IMqttMessageListener listener) {
 		try {
 			client.subscribe(topicFilter, listener);
