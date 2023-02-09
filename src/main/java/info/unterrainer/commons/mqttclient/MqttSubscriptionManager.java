@@ -19,8 +19,19 @@ public class MqttSubscriptionManager<U, T extends MqttSubscription> {
 		Map<U, T> oldMap = getOldMap();
 		Map<U, T> newMap = getCurrentMap();
 		SetIntersection<U> intersection = SetIntersection.of(oldMap.keySet(), newMap.keySet());
+		// Deleted subscriptions.
 		for (U id : intersection.getDelete())
 			client.unsubscribe(oldMap.get(id).getTopic());
+		// Changes in existing subscriptions.
+		for (U id : intersection.getLeave()) {
+			T oldSub = oldMap.get(id);
+			T newSub = newMap.get(id);
+			if (!oldSub.getTopic().equals(newSub.getTopic()) || oldSub.getType() != newSub.getType()) {
+				client.unsubscribe(oldSub.getTopic());
+				client.subscribe(newSub.getTopic(), newSub.getType(), newSub.getSetter());
+			}
+		}
+		// New subscriptions.
 		for (U id : intersection.getCreate()) {
 			T subscription = newMap.get(id);
 			client.subscribe(subscription.getTopic(), subscription.getType(), subscription.getSetter());
