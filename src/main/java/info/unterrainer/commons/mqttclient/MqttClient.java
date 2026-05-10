@@ -3,6 +3,8 @@ package info.unterrainer.commons.mqttclient;
 import java.util.function.BiConsumer;
 
 import org.eclipse.paho.client.mqttv3.IMqttMessageListener;
+import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -14,10 +16,18 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class MqttClient {
+
+	private static final int DEFAULT_DISPATCH_THREADS = 4;
+	private static final int DEFAULT_DISPATCH_QUEUE_CAPACITY = 1024;
+	private static final SaturationPolicy DEFAULT_SATURATION_POLICY = SaturationPolicy.DROP_OLDEST;
+	private static final long DEFAULT_DISPATCH_SHUTDOWN_MILLIS = 5000L;
+
 	private final String mqttServerAddress;
 	private final JsonMapper jsonMapper;
+	private final long dispatchShutdownMillis;
 
-	private org.eclipse.paho.client.mqttv3.MqttClient client;
+	private MqttAsyncClient client;
+	private final DispatchExecutor dispatchExecutor;
 
 	@Getter
 	private String clientId;
@@ -42,17 +52,34 @@ public class MqttClient {
 
 	public MqttClient(final String clientId, final String mqttServerAddress, final JsonMapper jsonMapper,
 			final MqttQos qos, final boolean retainOnServer) {
+		this(clientId, mqttServerAddress, jsonMapper, qos, retainOnServer, DEFAULT_DISPATCH_THREADS,
+				DEFAULT_DISPATCH_QUEUE_CAPACITY, DEFAULT_SATURATION_POLICY, DEFAULT_DISPATCH_SHUTDOWN_MILLIS);
+	}
+
+	public MqttClient(final String clientId, final MqttClientConfiguration config, final JsonMapper jsonMapper) {
+		this(clientId, config.mqttServer(), jsonMapper, config.qos(), config.retainOnServer(),
+				config.dispatchThreads(), config.dispatchQueueCapacity(), config.saturationPolicy(),
+				config.dispatchShutdownMillis());
+	}
+
+	private MqttClient(final String clientId, final String mqttServerAddress, final JsonMapper jsonMapper,
+			final MqttQos qos, final boolean retainOnServer, final int dispatchThreads,
+			final int dispatchQueueCapacity, final SaturationPolicy saturationPolicy,
+			final long dispatchShutdownMillis) {
 		this.mqttServerAddress = mqttServerAddress;
 		this.jsonMapper = jsonMapper;
 		this.qos = qos;
 		this.retainOnServer = retainOnServer;
 		this.clientId = clientId;
+		this.dispatchShutdownMillis = dispatchShutdownMillis;
 		try {
-			client = new org.eclipse.paho.client.mqttv3.MqttClient(this.mqttServerAddress, clientId);
+			client = new MqttAsyncClient(this.mqttServerAddress, clientId);
 		} catch (MqttException e) {
 			log.error("Error creating MQTT client.", e);
 		}
 		client.setCallback(new SimpleMqttCallback());
+		this.dispatchExecutor = new DispatchExecutor(clientId, dispatchThreads, dispatchQueueCapacity,
+				saturationPolicy);
 		connect();
 	}
 
@@ -68,7 +95,8 @@ public class MqttClient {
 			options.setAutomaticReconnect(true);
 			options.setCleanSession(false);
 			options.setConnectionTimeout(10);
-			client.connect(options);
+			IMqttToken token = client.connect(options);
+			token.waitForCompletion(10_000);
 		} catch (MqttException e) {
 			log.error("Error connecting MQTT client.", e);
 		}
@@ -104,7 +132,8 @@ public class MqttClient {
 		m.setQos(qos.getMode());
 		m.setRetained(retainOnServer);
 		try {
-			client.publish(topic, m);
+			IMqttToken token = client.publish(topic, m);
+			token.waitForCompletion();
 		} catch (MqttPersistenceException e) {
 			log.error("Error persisting MQTT message.", e);
 		} catch (MqttException e) {
@@ -116,9 +145,25 @@ public class MqttClient {
 		return receivedTopic.matches(wildCardTopic.replaceAll("\\+", "[^/]+").replaceAll("#", ".+"));
 	}
 
+	/**
+	 * Subscribes to {@code topicFilter} and routes incoming messages through the
+	 * dispatch executor. The supplied {@code listener} is invoked on a dispatch
+	 * thread, never on the Paho I/O thread, so a slow handler on one topic cannot
+	 * block delivery on others. With {@code dispatchThreads > 1} the listener may
+	 * observe messages on the same topic out of strict arrival order; configure
+	 * {@code dispatchThreads = 1} if per-topic ordering is required.
+	 */
 	public void subscribe(final String topicFilter, final IMqttMessageListener listener) {
+		IMqttMessageListener wrapped = (t, m) -> dispatchExecutor.submit(t, () -> {
+			try {
+				listener.messageArrived(t, m);
+			} catch (Exception e) {
+				log.error("Listener threw for topic [{}].", t, e);
+			}
+		});
 		try {
-			client.subscribe(topicFilter, listener);
+			IMqttToken token = client.subscribe(topicFilter, 1, wrapped);
+			token.waitForCompletion(5_000);
 		} catch (MqttException e) {
 			log.error("Error subscribing to topic [{}].", topicFilter);
 			log.error("Exception is", e);
@@ -127,13 +172,20 @@ public class MqttClient {
 
 	public void unsubscribe(final String topicFilter) {
 		try {
-			client.unsubscribe(topicFilter);
+			IMqttToken token = client.unsubscribe(topicFilter);
+			token.waitForCompletion(5_000);
 		} catch (MqttException e) {
 			log.error("Error unsubscribing topic [{}].", topicFilter);
 			log.error("Exception is", e);
 		}
 	}
 
+	/**
+	 * Subscribes to {@code topic}, parses each payload to {@code type}, and invokes
+	 * {@code setter} on the dispatch executor. See
+	 * {@link #subscribe(String, IMqttMessageListener)} for ordering and threading
+	 * notes.
+	 */
 	@SuppressWarnings("unchecked")
 	public <T> void subscribe(final String topic, final Class<?> type, final BiConsumer<String, T> setter) {
 
@@ -186,12 +238,22 @@ public class MqttClient {
 	 * client wasn't connected in the first place, this method returns immediately.
 	 */
 	public void disconnect() {
-		if (!client.isConnected())
-			return;
-		try {
-			client.disconnect();
-		} catch (MqttException e) {
-			log.error("Error disconnecting MQTT client.", e);
+		if (client.isConnected()) {
+			try {
+				IMqttToken token = client.disconnect();
+				token.waitForCompletion(10_000);
+			} catch (MqttException e) {
+				log.error("Error disconnecting MQTT client.", e);
+			}
 		}
+		dispatchExecutor.shutdown(dispatchShutdownMillis);
+	}
+
+	public long getDroppedDispatchCount() {
+		return dispatchExecutor.getDroppedCount();
+	}
+
+	public int getDispatchQueueDepth() {
+		return dispatchExecutor.getQueueDepth();
 	}
 }
