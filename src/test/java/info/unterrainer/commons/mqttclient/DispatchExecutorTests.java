@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.logging.log4j.Level;
@@ -73,6 +75,113 @@ public class DispatchExecutorTests {
 			assertThat(fastFiredAtMillis.get() - submitMillis).isLessThan(1_000);
 		} finally {
 			exec.shutdown(100);
+		}
+	}
+
+	@Test
+	public void sameTopicTasksNeverRunConcurrentlyAndStayInOrder() throws Exception {
+		DispatchExecutor exec = new DispatchExecutor("test-seq", 4, 16, SaturationPolicy.DROP_OLDEST);
+		try {
+			List<Integer> order = Collections.synchronizedList(new ArrayList<>());
+			CountDownLatch firstStarted = new CountDownLatch(1);
+			CountDownLatch releaseFirst = new CountDownLatch(1);
+			CountDownLatch secondDone = new CountDownLatch(1);
+			AtomicBoolean secondObservedFirstStillRunning = new AtomicBoolean(false);
+
+			exec.submit("A", () -> {
+				order.add(1);
+				firstStarted.countDown();
+				try {
+					releaseFirst.await(2, TimeUnit.SECONDS);
+				} catch (InterruptedException ignored) {
+					Thread.currentThread().interrupt();
+				}
+				order.add(2);
+			});
+			assertThat(firstStarted.await(1, TimeUnit.SECONDS)).isTrue();
+
+			exec.submit("A", () -> {
+				// If the mailbox let this run before the first task finished, order
+				// would only contain [1] here instead of [1, 2].
+				if (!order.equals(List.of(1, 2)))
+					secondObservedFirstStillRunning.set(true);
+				order.add(3);
+				secondDone.countDown();
+			});
+
+			// Give a broken (non-ordered) scheduler a real chance to start task 2 early;
+			// with 4 dispatch threads free, nothing but correct mailbox semantics stops it.
+			Thread.sleep(200);
+			releaseFirst.countDown();
+
+			assertThat(secondDone.await(2, TimeUnit.SECONDS)).isTrue();
+			assertThat(secondObservedFirstStillRunning.get()).isFalse();
+			assertThat(order).containsExactly(1, 2, 3);
+		} finally {
+			exec.shutdown(100);
+		}
+	}
+
+	@Test
+	public void differentTopicsRunGenuinelyConcurrently() throws Exception {
+		DispatchExecutor exec = new DispatchExecutor("test-concurrent-topics", 2, 16, SaturationPolicy.DROP_OLDEST);
+		CyclicBarrier rendezvous = new CyclicBarrier(2);
+		try {
+			CountDownLatch done = new CountDownLatch(2);
+			Runnable meetAtBarrier = () -> {
+				try {
+					rendezvous.await(2, TimeUnit.SECONDS);
+				} catch (Exception e) {
+					throw new RuntimeException(e);
+				}
+				done.countDown();
+			};
+
+			// Both handlers block until the other also arrives. This can only succeed if
+			// they run at the same time on different threads - proving the two topics'
+			// mailboxes are independently concurrent, not merely non-blocking.
+			exec.submit("A", meetAtBarrier);
+			exec.submit("B", meetAtBarrier);
+
+			assertThat(done.await(2, TimeUnit.SECONDS)).isTrue();
+		} finally {
+			exec.shutdown(2_000);
+		}
+	}
+
+	@Test
+	public void floodingTopicSaturationDoesNotAffectOtherTopic() throws Exception {
+		DispatchExecutor exec = new DispatchExecutor("test-flood-isolation", 2, 4, SaturationPolicy.DROP_OLDEST);
+		CountDownLatch gate = new CountDownLatch(1);
+		try {
+			// Occupy topic A's drain thread so its own mailbox queue backs up.
+			exec.submit("A", () -> {
+				try {
+					gate.await();
+				} catch (InterruptedException ignored) {
+					Thread.currentThread().interrupt();
+				}
+			});
+			// Flood topic A well past its own mailbox capacity (4).
+			for (int i = 0; i < 20; i++)
+				exec.submit("A", () -> {
+				});
+
+			// Topic B must still be delivered promptly and completely, unaffected by A's flood.
+			CountDownLatch bDone = new CountDownLatch(1);
+			AtomicLong bFiredAtMillis = new AtomicLong();
+			long submitMillis = System.currentTimeMillis();
+			exec.submit("B", () -> {
+				bFiredAtMillis.set(System.currentTimeMillis());
+				bDone.countDown();
+			});
+
+			assertThat(bDone.await(1, TimeUnit.SECONDS)).isTrue();
+			assertThat(bFiredAtMillis.get() - submitMillis).isLessThan(1_000);
+			assertThat(exec.getDroppedCount()).isGreaterThan(0L);
+		} finally {
+			gate.countDown();
+			exec.shutdown(2_000);
 		}
 	}
 
