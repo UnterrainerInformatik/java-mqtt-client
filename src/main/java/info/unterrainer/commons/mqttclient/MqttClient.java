@@ -84,6 +84,19 @@ public class MqttClient {
 	}
 
 	/**
+	 * Whether this client currently holds a connection to the broker.
+	 * <p>
+	 * It reports what is, not what is being attempted: while Paho is working
+	 * through its automatic-reconnect backoff, this is {@code false} until that
+	 * reconnect has completed. A caller that re-asserts its subscriptions after
+	 * an outage needs exactly that distinction, because subscribing while
+	 * disconnected throws -- once per topic.
+	 */
+	public boolean isConnected() {
+		return client.isConnected();
+	}
+
+	/**
 	 * Connects to the given server if it's disconnected. Immediately returns
 	 * otherwise.
 	 */
