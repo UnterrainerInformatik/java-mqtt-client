@@ -154,6 +154,36 @@ public class MqttClient {
 		}
 	}
 
+	/**
+	 * Hands a message to the broker connection and returns at once: it does not
+	 * try to (re)connect and does not wait for the broker's acknowledgement, so
+	 * its duration does not depend on the broker. Reconnecting is left to the
+	 * client's automatic reconnect. The message is never retained.
+	 * <p>
+	 * Only a refusal before the hand-over is reported. A message that was handed
+	 * over and is lost afterwards (for example because the connection drops
+	 * before the acknowledgement) is not; callers that need delivery confirmation
+	 * must obtain it on their own, e.g. from a reply message.
+	 *
+	 * @param topic   the topic to send to.
+	 * @param message the message to send.
+	 * @param qos     specifies how the message will be sent.
+	 * @throws MqttPublishException if the client refused the message, which has
+	 *                              then definitely not been sent.
+	 */
+	public void tryPublish(final String topic, final String message, final MqttQos qos)
+			throws MqttPublishException {
+		MqttMessage m = new MqttMessage();
+		m.setPayload(message.getBytes());
+		m.setQos(qos.getMode());
+		m.setRetained(false);
+		try {
+			client.publish(topic, m);
+		} catch (MqttException e) {
+			throw new MqttPublishException(topic, e);
+		}
+	}
+
 	public static boolean topicsMatch(String receivedTopic, String wildCardTopic) {
 		return receivedTopic.matches(wildCardTopic.replaceAll("\\+", "[^/]+").replaceAll("#", ".+"));
 	}

@@ -16,6 +16,18 @@ Drop events emit a WARN log per topic, throttled to one entry per topic per 5 se
 
 `disconnect()` first stops the broker connection, then drains in-flight handlers within `dispatchShutdownMillis`; tasks still queued when the budget elapses are abandoned and logged at WARN.
 
+## Fail-fast publishing
+
+`send(...)` connects on demand, waits for the broker's acknowledgement and only logs failures. When a caller needs to know that a message could not be sent, and must not block on the broker, use `tryPublish(topic, message, qos)`. It does not reconnect and does not wait for the acknowledgement. It throws the checked `MqttPublishException` when the client refuses the message (for example while disconnected), in which case the message has definitely not been sent. Loss after the hand-over is not reported, so confirm delivery through a reply if you need it.
+
+```java
+try {
+	client.tryPublish("device/rpc", payload, MqttQos.AT_LEAST_ONCE);
+} catch (MqttPublishException e) {
+	// not sent: take another path
+}
+```
+
 ## Configuration
 
 | Setting                | Default       | Env override                          |
