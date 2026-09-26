@@ -11,4 +11,4 @@
 ## 3. Release (needs Gerald's go-ahead)
 
 - [x] 3.1 Update README (API section) with `tryPublish`
-- [ ] 3.2 Commit and push to `master` → pipeline bumps to 1.0.8 and publishes to Maven Central; confirm the artifact is available
+- [x] 3.2 Commit and push to `master` → pipeline bumps to 1.0.8 and publishes to Maven Central; confirm the artifact is available
